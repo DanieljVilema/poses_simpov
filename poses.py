@@ -17,6 +17,10 @@ from calibracion import GestorCalbracion
 from calculos import detectar_orientacion, extraer_angulos, evaluar_postura
 import ui
 
+# Modelos de pose disponibles (YOLO26 - más reciente):
+# yolo26n-pose.pt (nano), yolo26s-pose.pt (small), yolo26m-pose.pt (medium)
+# Para detección de posturas de tiro se recomienda mínimo 'small'
+
 # Índices COCO
 H_I, H_D = 5, 6
 C_I, C_D = 7, 8
@@ -28,11 +32,11 @@ ROD_I, ROD_D = 13, 14
 
 class MotorBiometrico:
     """Orquestador principal del sistema"""
-    
+
     def __init__(self, modelo_path='yolov8n-pose.pt'):
         """
         Inicializa el motor biométrico.
-        
+
         Args:
             modelo_path: Ruta al modelo YOLO
         """
@@ -41,11 +45,36 @@ class MotorBiometrico:
         self.gestor = GestorCalbracion(tolerancia=12)
         self.orientacion_actual = "DESCONOCIDO"
         self.nombre_ventana = 'DINDES - Motor Biometrico IA'
-        
+
         # Crear ventana
         ui.crear_ventana(self.nombre_ventana, self.callback_click)
-        
+
         print("Iniciando Sistema Omnidireccional de Evaluación Táctica...")
+
+    def seleccionar_arma(self):
+        """
+        Muestra el menú de selección de arma al inicio.
+
+        Returns:
+            bool: True si se seleccionó un arma, False si se canceló
+        """
+        lista_armas = self.gestor.obtener_lista_armas()
+        arma = ui.mostrar_menu_armas(self.nombre_ventana, lista_armas)
+
+        if arma is None:
+            return False
+
+        # Si el arma ya existe, seleccionarla; si no, crearla
+        if arma in self.gestor.obtener_lista_armas():
+            self.gestor.seleccionar_arma(arma)
+            print(f"Arma seleccionada: {arma}")
+        else:
+            self.gestor.crear_arma(arma)
+            print(f"Nueva arma creada: {arma}")
+
+        # Restaurar callback del mouse para el modo normal
+        cv2.setMouseCallback(self.nombre_ventana, self.callback_click)
+        return True
 
     def callback_click(self, evento, x, y, flags, param):
         """Callback para eventos de mouse"""
@@ -58,15 +87,15 @@ class MotorBiometrico:
     def procesar_frame(self, frame):
         """
         Procesa un frame de video.
-        
+
         Args:
             frame: Frame de OpenCV
-        
+
         Returns:
             frame: Frame procesado con visualización
         """
         ui_frame = frame.copy()
-        
+
         try:
             # Obtener predicciones
             resultados = self.modelo(frame, verbose=False)
@@ -76,42 +105,45 @@ class MotorBiometrico:
             # 1. DETECCIÓN AUTOMÁTICA DE ORIENTACIÓN
             self.orientacion_actual = detectar_orientacion(kp, conf)
 
-            # 2. DIBUJAR HUD
-            ui.dibujar_hud(ui_frame, self.orientacion_actual, self.gestor.obtener_todos_los_patrones())
+            # 2. DIBUJAR HUD (con nombre de arma)
+            ui.dibujar_hud(ui_frame, self.orientacion_actual,
+                           self.gestor.obtener_todos_los_patrones(),
+                           self.gestor.obtener_arma_actual())
 
             # 3. LÓGICA DE CALIBRACIÓN Y EVALUACIÓN
             if self.orientacion_actual != "DESCONOCIDO":
-                
-                # Extraer ángulos según la vista actual
-                brazo, torso, codo_hombro_cadera = extraer_angulos(kp, self.orientacion_actual)
+
+                # Extraer ángulos según la vista actual (con confianza para brazo soporte)
+                angulos = extraer_angulos(kp, self.orientacion_actual, conf)
 
                 # --- ESTADO: CONTEO PARA CALIBRAR ---
                 if self.gestor.obtener_estado() == "CONTEO":
                     tiempo_restante = self.gestor.obtener_tiempo_restante_calibracion()
                     ui.mostrar_mensaje_calibracion(ui_frame, self.orientacion_actual, tiempo_restante)
-                    
+
                     if self.gestor.calibracion_completada():
-                        self.gestor.guardar_patron(self.orientacion_actual, brazo, torso, codo_hombro_cadera)
+                        self.gestor.guardar_patron(
+                            self.orientacion_actual,
+                            angulos["brazo"], angulos["torso"],
+                            angulos["codo_hombro_cadera"],
+                            angulos.get("brazo_soporte")
+                        )
 
                 # --- ESTADO: EVALUACIÓN EN VIVO ---
                 elif self.gestor.obtener_estado() == "EVALUANDO":
-                    # Dibujar botón
+                    # Dibujar botón (NUEVO PATRON o RECALIBRAR)
                     ui.dibujar_boton_nuevo_patron(ui_frame, self.gestor.esta_calibrado(self.orientacion_actual))
 
                     if self.gestor.esta_calibrado(self.orientacion_actual):
                         # Evaluar postura
                         patron = self.gestor.obtener_patron(self.orientacion_actual)
-                        col_b, col_t, col_chc = evaluar_postura(
-                            brazo, torso, codo_hombro_cadera, 
-                            patron, 
+                        colores = evaluar_postura(
+                            angulos, patron,
                             self.gestor.obtener_tolerancia()
                         )
-                        
+
                         # Dibujar cuerpo con colores de evaluación
-                        if self.orientacion_actual == "PERFIL_DERECHO":
-                            ui.dibujar_cuerpo_derecho(ui_frame, kp, col_b, col_t, col_chc)
-                        else:
-                            ui.dibujar_cuerpo_izquierdo(ui_frame, kp, col_b, col_t, col_chc)
+                        ui.dibujar_cuerpo(ui_frame, kp, self.orientacion_actual, colores)
                     else:
                         ui.mostrar_mensaje_prescalibracion(ui_frame)
 
@@ -122,6 +154,12 @@ class MotorBiometrico:
 
     def ejecutar(self):
         """Bucle principal de ejecución"""
+        # Mostrar menú de selección de arma al inicio
+        if not self.seleccionar_arma():
+            print("No se seleccionó arma. Cerrando sistema.")
+            self.cerrar()
+            return
+
         while self.cap.isOpened():
             exito, frame = self.cap.read()
             if not exito:
@@ -129,7 +167,7 @@ class MotorBiometrico:
 
             frame_procesado = self.procesar_frame(frame)
             cv2.imshow(self.nombre_ventana, frame_procesado)
-            
+
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
@@ -143,5 +181,5 @@ class MotorBiometrico:
 
 
 if __name__ == "__main__":
-    motor = MotorBiometrico(modelo_path='yolov8n-pose.pt')
+    motor = MotorBiometrico(modelo_path='yolo26s-pose.pt')
     motor.ejecutar()

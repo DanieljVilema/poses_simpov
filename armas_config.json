@@ -1,0 +1,64 @@
+{
+  "armas": {
+    "pistola": {
+      "PERFIL_DERECHO": {
+        "calibrado": true,
+        "brazo": 110,
+        "torso": 64,
+        "codo_hombro_cadera": 20
+      },
+      "PERFIL_IZQUIERDO": {
+        "calibrado": false,
+        "brazo": 0,
+        "torso": 0,
+        "codo_hombro_cadera": 0
+      }
+    },
+    "rifle": {
+      "PERFIL_DERECHO": {
+        "calibrado": true,
+        "brazo": 171,
+        "torso": 75,
+        "codo_hombro_cadera": 70
+      },
+      "PERFIL_IZQUIERDO": {
+        "calibrado": true,
+        "brazo": 177,
+        "torso": 54,
+        "codo_hombro_cadera": 28
+      }
+    },
+    "bazuca": {
+      "PERFIL_DERECHO": {
+        "calibrado": true,
+        "brazo": 167,
+        "torso": 85,
+        "codo_hombro_cadera": 72,
+        "brazo_soporte": null
+      },
+      "PERFIL_IZQUIERDO": {
+        "calibrado": true,
+        "brazo": 163,
+        "torso": 85,
+        "codo_hombro_cadera": 71,
+        "brazo_soporte": 138
+      }
+    },
+    "pist1": {
+      "PERFIL_DERECHO": {
+        "calibrado": true,
+        "brazo": 161,
+        "torso": 102,
+        "codo_hombro_cadera": 62,
+        "brazo_soporte": null
+      },
+      "PERFIL_IZQUIERDO": {
+        "calibrado": true,
+        "brazo": 150,
+        "torso": 99,
+        "codo_hombro_cadera": 61,
+        "brazo_soporte": 110
+      }
+    }
+  }
+}
