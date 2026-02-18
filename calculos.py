@@ -17,7 +17,7 @@ TOB_I, TOB_D = 15, 16
 
 class SuavizadorTemporal:
     """Suaviza keypoints usando promedio de ventana deslizante para eliminar jitter"""
-    def __init__(self, ventana=8):
+    def __init__(self, ventana=5):
         self.buffer_kp = deque(maxlen=ventana)
         self.buffer_conf = deque(maxlen=ventana)
 
@@ -49,7 +49,9 @@ def detectar_orientacion(kp, conf):
     if dist_hombros_x > 100 and dist_caderas_x > 80:
         return "DESCONOCIDO"
 
-    votos_derecho, votos_izquierdo = 0, 0
+    votos_derecho = 0
+    votos_izquierdo = 0
+
     if conf[H_D] > conf[H_I] + 0.1: votos_derecho += 2
     elif conf[H_I] > conf[H_D] + 0.1: votos_izquierdo += 2
 
@@ -63,11 +65,14 @@ def detectar_orientacion(kp, conf):
         if kp[H_D][0] > kp[H_I][0]: votos_derecho += 1
         else: votos_izquierdo += 1
 
-    if votos_derecho > votos_izquierdo and votos_derecho >= 2: return "PERFIL_DERECHO"
-    elif votos_izquierdo > votos_derecho and votos_izquierdo >= 2: return "PERFIL_IZQUIERDO"
+    if votos_derecho > votos_izquierdo and votos_derecho >= 2:
+        return "PERFIL_DERECHO"
+    elif votos_izquierdo > votos_derecho and votos_izquierdo >= 2:
+        return "PERFIL_IZQUIERDO"
     else:
         if dist_hombros_x <= 60:
-            return "PERFIL_DERECHO" if conf[H_D] >= conf[H_I] else "PERFIL_IZQUIERDO"
+            if conf[H_D] >= conf[H_I]: return "PERFIL_DERECHO"
+            else: return "PERFIL_IZQUIERDO"
         return "DESCONOCIDO"
 
 def _keypoints_confiables(conf, indices, umbral=0.3):
@@ -80,10 +85,12 @@ def extraer_angulos(kp, orientacion, conf=None):
     }
 
     if orientacion == "PERFIL_DERECHO":
-        dom_h, dom_c, dom_m, dom_cad, dom_rod, dom_tob = H_D, C_D, M_D, CAD_D, ROD_D, TOB_D
+        dom_h, dom_c, dom_m = H_D, C_D, M_D
+        dom_cad, dom_rod, dom_tob = CAD_D, ROD_D, TOB_D
         sop_h, sop_c, sop_m = H_I, C_I, M_I
     elif orientacion == "PERFIL_IZQUIERDO":
-        dom_h, dom_c, dom_m, dom_cad, dom_rod, dom_tob = H_I, C_I, M_I, CAD_I, ROD_I, TOB_I
+        dom_h, dom_c, dom_m = H_I, C_I, M_I
+        dom_cad, dom_rod, dom_tob = CAD_I, ROD_I, TOB_I
         sop_h, sop_c, sop_m = H_D, C_D, M_D
     else:
         return resultado
@@ -92,13 +99,13 @@ def extraer_angulos(kp, orientacion, conf=None):
     resultado["torso"] = calcular_angulo(kp[dom_h], kp[dom_cad], kp[dom_rod])
     resultado["codo_hombro_cadera"] = calcular_angulo(kp[dom_c], kp[dom_h], kp[dom_cad])
 
-    if conf is None: return resultado
-
-    if _keypoints_confiables(conf, [sop_h, sop_c, sop_m], umbral=0.15):
+    if conf is not None and _keypoints_confiables(conf, [sop_h, sop_c, sop_m], umbral=0.15):
         resultado["brazo_soporte"] = calcular_angulo(kp[sop_h], kp[sop_c], kp[sop_m])
-    if _keypoints_confiables(conf, [dom_cad, dom_rod, dom_tob]):
+        
+    if conf is not None and _keypoints_confiables(conf, [dom_cad, dom_rod, dom_tob]):
         resultado["rodilla"] = calcular_angulo(kp[dom_cad], kp[dom_rod], kp[dom_tob])
-    if _keypoints_confiables(conf, [NARIZ, dom_h, dom_cad]):
+        
+    if conf is not None and _keypoints_confiables(conf, [NARIZ, dom_h, dom_cad]):
         resultado["cabeza"] = calcular_angulo(kp[NARIZ], kp[dom_h], kp[dom_cad])
 
     return resultado
@@ -112,7 +119,8 @@ ANGULOS_PRINCIPALES = ["brazo", "torso", "codo_hombro_cadera"]
 ANGULOS_OPCIONALES = ["brazo_soporte", "rodilla", "cabeza"]
 
 def evaluar_postura(angulos, patron):
-    colores, scores = {}, []
+    colores = {}
+    scores = []
 
     for key in ANGULOS_PRINCIPALES:
         tol = _tolerancia_adaptativa(patron.get(f"{key}_std"))
@@ -127,8 +135,9 @@ def evaluar_postura(angulos, patron):
             colores[f"col_{key}"] = (0, 255, 0) if diff <= tol else (0, 0, 255)
             scores.append((max(0.0, 1.0 - diff / (tol * 2)), PESOS_ANGULOS[key]))
         elif angulos.get(key) is not None:
-            colores[f"col_{key}"] = (0, 255, 255) # Amarillo si es visible pero no hay patrón
+            colores[f"col_{key}"] = (0, 255, 255)  # Amarillo (visible pero sin calibrar)
 
     total_peso = sum(p for _, p in scores) if scores else 1
     colores["score"] = int(sum(s * p for s, p in scores) / total_peso * 100) if scores else 0
+
     return colores

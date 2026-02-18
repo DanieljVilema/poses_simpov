@@ -1,6 +1,6 @@
 """
 Módulo de Calibración
-Contiene la lógica de calibración estadística, almacenamiento de patrones y gestión de estados
+Contiene toda la lógica de calibración estadística, almacenamiento de patrones y gestión de estados
 """
 import time
 import json
@@ -10,13 +10,17 @@ import numpy as np
 ARCHIVO_CONFIG = "armas_config.json"
 
 class GestorCalbracion:
+    """Gestor centralizado de calibración y patrones"""
+
     def __init__(self):
-        self.tiempo_calibracion = 5
+        self.tiempo_calibracion = 5  # Segundos para calibrar
         self.estado_actual = "EVALUANDO"
         self.tiempo_inicio = 0
         self.arma_actual = None
         self.patrones = self._patrones_vacios()
         self.config = self._cargar_config()
+        
+        # Variables para calibración estadística
         self.muestras = []
         self.orientacion_calibrando = None
 
@@ -33,38 +37,39 @@ class GestorCalbracion:
     def _cargar_config(self):
         if os.path.exists(ARCHIVO_CONFIG):
             try:
-                with open(ARCHIVO_CONFIG, "r", encoding="utf-8") as f:
+                with open(ARCHIVO_CONFIG, 'r', encoding='utf-8') as f:
                     return json.load(f)
-            except: pass
+            except (json.JSONDecodeError, IOError):
+                return {"armas": {}}
         return {"armas": {}}
 
     def _guardar_config(self):
-        with open(ARCHIVO_CONFIG, "w", encoding="utf-8") as f:
-            json.dump(self.config, f, indent=4)
+        with open(ARCHIVO_CONFIG, 'w', encoding='utf-8') as f:
+            json.dump(self.config, f, indent=2, ensure_ascii=False)
 
     def obtener_lista_armas(self):
         return list(self.config.get("armas", {}).keys())
 
-    def seleccionar_arma(self, nombre_arma):
-        self.arma_actual = nombre_arma
-        if nombre_arma in self.config.get("armas", {}):
-            datos_guardados = self.config["armas"][nombre_arma]
-            nuevos_patrones = self._patrones_vacios()
-            for orientacion in ["PERFIL_DERECHO", "PERFIL_IZQUIERDO"]:
-                if orientacion in datos_guardados:
-                    for k, v in datos_guardados[orientacion].items():
-                        nuevos_patrones[orientacion][k] = v
-            self.patrones = nuevos_patrones
-            return True
-        return False
+    def seleccionar_arma(self, nombre):
+        self.arma_actual = nombre
+        datos = self.config.get("armas", {}).get(nombre)
+        if datos:
+            vacios = self._patrones_vacios()
+            self.patrones = {}
+            for perfil in ("PERFIL_DERECHO", "PERFIL_IZQUIERDO"):
+                base = dict(vacios[perfil])
+                base.update(datos.get(perfil, {}))
+                self.patrones[perfil] = base
+        else:
+            self.patrones = self._patrones_vacios()
 
-    def crear_arma(self, nombre_arma):
-        if nombre_arma and nombre_arma not in self.config.get("armas", {}):
-            self.config.setdefault("armas", {})[nombre_arma] = self._patrones_vacios()
-            self._guardar_config()
-            self.seleccionar_arma(nombre_arma)
-            return True
-        return False
+    def crear_arma(self, nombre):
+        self.config.setdefault("armas", {})[nombre] = self._patrones_vacios()
+        self._guardar_config()
+        self.seleccionar_arma(nombre)
+
+    def obtener_arma_actual(self):
+        return self.arma_actual
 
     def iniciar_calibracion(self, orientacion):
         self.estado_actual = "CONTEO"
@@ -111,15 +116,17 @@ class GestorCalbracion:
         self.muestras = []
         self.orientacion_calibrando = None
 
-    def calibracion_completada(self):
-        return (time.time() - self.tiempo_inicio) >= self.tiempo_calibracion
-
     def obtener_tiempo_restante_calibracion(self):
         return max(0, self.tiempo_calibracion - int(time.time() - self.tiempo_inicio))
+
+    def calibracion_completada(self):
+        return self.obtener_tiempo_restante_calibracion() <= 0
 
     def obtener_patron(self, orientacion): return self.patrones.get(orientacion, {})
     def esta_calibrado(self, orientacion): return self.patrones.get(orientacion, {}).get("calibrado", False)
     def obtener_estado(self): return self.estado_actual
-    def obtener_arma_actual(self): return self.arma_actual
+    def cambiar_a_evaluacion(self): self.estado_actual = "EVALUANDO"
+    def resetear_patrones(self): 
+        self.patrones = self._patrones_vacios()
+        self.estado_actual = "EVALUANDO"
     def obtener_todos_los_patrones(self): return self.patrones
-    def resetear_patrones(self): self.patrones = self._patrones_vacios()

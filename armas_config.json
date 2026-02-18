@@ -59,6 +59,38 @@
         "codo_hombro_cadera": 61,
         "brazo_soporte": 110
       }
+    },
+    "pis1": {
+      "PERFIL_DERECHO": {
+        "calibrado": true,
+        "brazo": 96,
+        "brazo_std": 48.3,
+        "torso": 174,
+        "torso_std": 4.6,
+        "codo_hombro_cadera": 7,
+        "codo_hombro_cadera_std": 4.7,
+        "brazo_soporte": 155,
+        "brazo_soporte_std": 23.3,
+        "rodilla": null,
+        "rodilla_std": null,
+        "cabeza": 130,
+        "cabeza_std": 10.9
+      },
+      "PERFIL_IZQUIERDO": {
+        "calibrado": true,
+        "brazo": 156,
+        "brazo_std": 2.6,
+        "torso": 174,
+        "torso_std": 1.6,
+        "codo_hombro_cadera": 70,
+        "codo_hombro_cadera_std": 3.0,
+        "brazo_soporte": 93,
+        "brazo_soporte_std": 29.1,
+        "rodilla": null,
+        "rodilla_std": null,
+        "cabeza": 177,
+        "cabeza_std": 1.1
+      }
     }
   }
 }
